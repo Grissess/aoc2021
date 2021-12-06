@@ -1,0 +1,1 @@
+print(*(lambda np, sz: (lambda out: (out, out.sum()))(np.bincount(np.array([int(x) for x in input('fish:').split(',')]), minlength=sz) * np.concatenate((np.matrix([np.bincount([sz-1,sz-3],minlength=sz)]), np.identity(sz,int)[:sz-1])) ** int(input('steps:'))))(__import__('numpy'), 9))
