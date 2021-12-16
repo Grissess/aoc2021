@@ -30,6 +30,51 @@ def bmunch(s):
         print(f'x {x}, b {b}')
     yield x
 
+class Pkt:
+    def __init__(self, ver, tp, lc, l, val):
+        self.ver, self.tp, self.lc, self.l, self.val = ver, tp, lc, l, val
+
+    OPTBL = {0: '+', 1: '*', 2: 'min', 3: 'max', 5: '<', 6: '>', 7: '=='}
+    def __repr__(self):
+        ret = f'<Packet ver={self.ver} tp={self.tp} '
+        if self.tp == 4:
+            return ret + f'val={self.val}>'
+        return ret + f'lc={self.lc} l={self.l}>'
+
+    def __str__(self):
+        if self.tp == 4:
+            return str(self.val)
+        return self.OPTBL[self.tp] + f'({self.lc},{self.l})'
+
+    def walk(self, stk=()):
+        yield self, stk
+        try:
+            iter(self.val)
+        except TypeError:
+            pass
+        else:
+            ns = stk + (self,)
+            for i in self.val:
+                yield from i.walk(ns)
+
+    def eval(self):
+        if self.tp == 0:
+            return sum(x.eval() for x in self.val)
+        elif self.tp == 1:
+            return functools.reduce(operator.mul, (x.eval() for x in self.val), 1)
+        elif self.tp == 2:
+            return min(x.eval() for x in self.val)
+        elif self.tp == 3:
+            return max(x.eval() for x in self.val)
+        elif self.tp == 4:
+            return self.val
+        elif self.tp == 5:
+            return 1 if self.val[0].eval() > self.val[1].eval() else 0
+        elif self.tp == 6:
+            return 1 if self.val[0].eval() < self.val[1].eval() else 0
+        elif self.tp == 7:
+            return 1 if self.val[0].eval() == self.val[1].eval() else 0
+
 def pkt(s):
     bm = bmunch(s)
     bm.send(None)
@@ -41,7 +86,7 @@ def p_top(bm, lv=0):
     t = bm.send(3)
     print(f'{indent*lv}-- top {v}, {t}')
     if t == 4:
-        return v, t, p_lit(bm, lv+1)
+        return Pkt(v, t, 0, 0, p_lit(bm, lv+1))
     else:
         tlid = bm.send(1)
         l = bm.send(11 if tlid else 15)
@@ -53,10 +98,10 @@ def p_top(bm, lv=0):
             while bm.send(WHERE) < end:
                 r.append(p_top(bm, lv+1))
             assert bm.send(WHERE) == end
-            return v, t, r
+            return Pkt(v, t, tlid, l, r)
         else:
             print(f'{indent*lv}-- top: sub pkts {l}')
-            return v, t, [p_top(bm, lv+1) for i in range(l)]
+            return Pkt(v, t, tlid, l, [p_top(bm, lv+1) for i in range(l)])
 
 def p_lit(bm, lv=0):
     print('{indent*lv}-- lit')
@@ -68,36 +113,10 @@ def p_lit(bm, lv=0):
             print(f'{indent*lv}-- lit={r}')
             return r
 
-def walk(s):
-    for ver, tp, val in s:
-        yield ver, tp, val
-        try:
-            iter(val)
-        except TypeError:
-            pass
-        else:
-            yield from walk(val)
-
-def eval(ver, tp, val):
-    if tp == 0:
-        return sum(eval(*x) for x in val)
-    elif tp == 1:
-        return functools.reduce(operator.mul, (eval(*x) for x in val), 1)
-    elif tp == 2:
-        return min(eval(*x) for x in val)
-    elif tp == 3:
-        return max(eval(*x) for x in val)
-    elif tp == 4:
-        return val
-    elif tp == 5:
-        return 1 if eval(*val[0]) > eval(*val[1]) else 0
-    elif tp == 6:
-        return 1 if eval(*val[0]) < eval(*val[1]) else 0
-    elif tp == 7:
-        return 1 if eval(*val[0]) == eval(*val[1]) else 0
-
 p = pkt(input('packet:'))
-print(p)
-vertot = sum(ver for ver, tp, val in walk([p]))
+print('structure:')
+for pk, st in p.walk():
+    print(f'{"  "*len(st)}{pk!s}')
+vertot = sum(pk.ver for pk,st in p.walk())
 print(f'tot {vertot}')
-print(f'val {eval(*p)}')
+print(f'val {p.eval()}')
