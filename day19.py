@@ -100,7 +100,7 @@ if __name__ == '__main__':
     for sc in scanners:
         gb = sc.global_beacons()
         pl = len(bsu)
-        bsu.update(db)
+        bsu.update(gb)
         print(f'scanner {sc.name} contributes {len(sc.beacons)} beacons: global from {pl} to {len(bsu)} ({len(bsu) - pl})')
 
     print('--- final positions ---')
